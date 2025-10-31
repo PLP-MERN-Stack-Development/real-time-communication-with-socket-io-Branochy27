@@ -15,10 +15,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.CLIENT_URL 
+      : 'http://localhost:5173',
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  pingTimeout: 60000,
+  transports: ['websocket', 'polling']
 });
 
 // Middleware
@@ -121,6 +125,30 @@ app.get('/api/users', (req, res) => {
 // Root route
 app.get('/', (req, res) => {
   res.send('Socket.io Chat Server is running');
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Internal Server Error' 
+      : err.message
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM. Performing graceful shutdown...');
+  server.close(() => {
+    console.log('Server closed. Exiting process.');
+    process.exit(0);
+  });
 });
 
 // Start server
